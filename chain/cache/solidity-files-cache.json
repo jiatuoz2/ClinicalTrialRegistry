@@ -1,0 +1,41 @@
+{
+  "_format": "hh-sol-cache-2",
+  "files": {
+    "D:\\Graduate\\Engineering Blockchain and Web3 Apps\\clinical-trial-chain\\chain\\contracts\\ClinicalTrialRegistry.sol": {
+      "lastModificationDate": 1762726503918,
+      "contentHash": "7f903aea39ad68d265388d63a9e74181",
+      "sourceName": "contracts/ClinicalTrialRegistry.sol",
+      "solcConfig": {
+        "version": "0.8.24",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.24"
+      ],
+      "artifacts": [
+        "ClinicalTrialRegistry"
+      ]
+    }
+  }
+}
