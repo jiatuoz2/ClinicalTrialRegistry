@@ -1,4 +1,4 @@
-# Clinical Trial Data Registry (FastAPI + Solidity + React)
+# Clinical Trial Data Registry
 
 This repository implements a blockchain-powered clinical trial data
 registry, deployed on the Sepolia Test Network. It demonstrates how
