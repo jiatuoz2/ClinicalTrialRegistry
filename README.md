@@ -56,10 +56,10 @@ This system replaces institutional trust with **cryptographic trust** — every 
 
 ```mermaid
 graph TD
-    A[🧬 Patient / Hospital UI (React)] -->|HTTP Requests| B[⚙️ FastAPI Backend]
-    B -->|JSON-RPC| C[🪐 Ethereum (Sepolia Testnet)]
-    C -->|Events| D[(🧱 Smart Contract: ClinicalTrialRegistry)]
-    B -->|Sync Logs| E[(🧾 SQLite Database)]
+    A[Patient / Hospital UI (React) 🧬] -->|HTTP Requests| B[FastAPI Backend ⚙️]
+    B -->|JSON-RPC| C[Ethereum (Sepolia Testnet) 🪐]
+    C -->|Events| D[(Smart Contract: ClinicalTrialRegistry 🧱)]
+    B -->|Sync Logs| E[(SQLite Database 🧾)]
     E -->|Audit Queries| A
 ```
 
