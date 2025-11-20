@@ -174,3 +174,5 @@ If backend uses a different port:
 
 -   All keys and data are for testing only.\
 -   No real medical information is stored.\
+
+**Clinical Trial Data Registry is successfully deployed on Sepolia Testnet — explore the verified smart contract [here](https://sepolia.etherscan.io/address/0x38790F8BAeFEa54bcb9A86763a94852ECed466Fb#code).**
