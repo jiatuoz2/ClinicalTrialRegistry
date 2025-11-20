@@ -1,24 +1,52 @@
-import React, { useState } from "react";
+import React from "react";
 import { useNavigate } from "react-router-dom";
-import { User, Lock } from "lucide-react";
 
 export default function Login() {
   const navigate = useNavigate();
+  const HOSPITAL_ADDRESS = import.meta.env.VITE_HOSPITAL_ADDRESS?.toLowerCase();
 
-  const [hospitalUsername, setHospitalUsername] = useState("");
-  const [hospitalPassword, setHospitalPassword] = useState("");
-
-  const handlePatientLogin = async () => {
+  const handleMetaMaskLogin = async (role: "patient" | "hospital") => {
     if (!window.ethereum) {
       alert("MetaMask is not installed.");
       return;
     }
+
     try {
+      await window.ethereum.request({
+        method: "wallet_requestPermissions",
+        params: [{ eth_accounts: {} }],
+      });
+
       const accounts = await window.ethereum.request({
         method: "eth_requestAccounts",
       });
-      console.log("Connected:", accounts[0]);
-      navigate("/patient");
+
+      const userAddress = accounts[0].toLowerCase();
+      console.log(`Connected wallet: ${userAddress}`);
+
+      if (role === "patient") {
+        if (HOSPITAL_ADDRESS && userAddress === HOSPITAL_ADDRESS) {
+          alert("The hospital wallet cannot log in as a patient.");
+          return;
+        }
+
+        navigate("/patient");
+        return;
+      }
+
+      if (role === "hospital") {
+        if (!HOSPITAL_ADDRESS) {
+          alert("Hospital address not configured in .env");
+          return;
+        }
+
+        if (userAddress !== HOSPITAL_ADDRESS) {
+          alert("You are not the authorized hospital wallet.");
+          return;
+        }
+
+        navigate("/hospital");
+      }
     } catch (err) {
       console.error("MetaMask login failed:", err);
     }
@@ -27,27 +55,16 @@ export default function Login() {
   return (
     <div className="min-h-screen w-full flex bg-gradient-to-br from-[#f6faff] via-[#e9f3ff] to-[#d9eaff]">
 
-      {/* LEFT SIDE – Project Introduction */}
+      {/* LEFT SIDE – Intro */}
       <div className="flex-1 flex flex-col justify-center px-20 relative overflow-hidden">
-
-        {/* Animated floating blob */}
-        <div className="
-          absolute -top-24 -left-24 w-[500px] h-[500px]
+        <div className="absolute -top-24 -left-24 w-[500px] h-[500px]
           bg-gradient-to-br from-blue-300 via-cyan-200 to-blue-100
-          rounded-full blur-[120px] opacity-60
-          animate-floating
-        "></div>
+          rounded-full blur-[120px] opacity-60 animate-floating"></div>
 
-        {/* Light animated second blob */}
-        <div className="
-          absolute bottom-10 left-32 w-[350px] h-[350px]
+        <div className="absolute bottom-10 left-32 w-[350px] h-[350px]
           bg-gradient-to-br from-cyan-200 via-blue-100 to-white
-          rounded-full blur-[150px] opacity-40
-          animate-floating-delayed
-        "></div>
+          rounded-full blur-[150px] opacity-40 animate-floating-delayed"></div>
 
-
-        {/* TEXT CONTENT */}
         <h1 className="text-5xl font-bold text-blue-700 z-10">
           Clinical Trial Registry
         </h1>
@@ -73,12 +90,12 @@ export default function Login() {
             Login
           </h2>
           <p className="text-center text-gray-500 mt-1 mb-8 text-sm">
-            Access your secure dashboard
+            Select your role
           </p>
 
           {/* Patient Login */}
           <button
-            onClick={handlePatientLogin}
+            onClick={() => handleMetaMaskLogin("patient")}
             className="w-full mb-6 py-3 rounded-xl text-white font-semibold shadow-md
                      bg-gradient-to-r from-blue-600 to-cyan-500 hover:scale-[1.04]
                      transition-transform"
@@ -99,43 +116,17 @@ export default function Login() {
           </div>
 
           {/* Hospital Login */}
-          <div className="relative mb-4">
-            <User className="absolute left-3 top-3 text-gray-400" size={20} />
-            <input
-              type="text"
-              placeholder="Username"
-              className="w-full p-3 pl-10 rounded-xl border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition"
-              value={hospitalUsername}
-              onChange={(e) => setHospitalUsername(e.target.value)}
-            />
-          </div>
-
-          <div className="relative mb-6">
-            <Lock className="absolute left-3 top-3 text-gray-400" size={20} />
-            <input
-              type="password"
-              placeholder="Password"
-              className="w-full p-3 pl-10 rounded-xl border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition"
-              value={hospitalPassword}
-              onChange={(e) => setHospitalPassword(e.target.value)}
-            />
-          </div>
-
           <button
-            onClick={() => navigate("/hospital")}
-            disabled={!hospitalUsername || !hospitalPassword}
-            className={`w-full py-3 rounded-xl font-semibold shadow-md transition ${
-              hospitalUsername && hospitalPassword
-                ? "bg-blue-700 text-white hover:scale-[1.03]"
-                : "bg-gray-300 text-gray-500 cursor-not-allowed"
-            }`}
+            onClick={() => handleMetaMaskLogin("hospital")}
+            className="w-full py-3 rounded-xl text-white font-semibold shadow-md
+                       bg-blue-700 hover:scale-[1.03] transition"
           >
             Login as Hospital
           </button>
         </div>
       </div>
 
-      {/* Keyframe CSS */}
+      {/* Keyframes */}
       <style>
         {`
           @keyframes floating {
