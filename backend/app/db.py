@@ -1,12 +1,28 @@
-from sqlmodel import SQLModel, create_engine
-from models import Patient, Trial, AccessLog, IntegrityEvent
+# backend/app/db.py
 import os
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker, Session
+from models import Base  # your models file
 
-# DB_PATH = os.path.join(os.path.dirname(__file__), "..", "demo.sqlite3")
-# _engine = create_engine(f"sqlite:///{DB_PATH}", echo=False)
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "postgresql+psycopg://postgres:zoujiatuo@localhost:5432/clinical",
+)
 
-url = os.getenv("DATABASE_URL", "postgresql+psycopg://postgres:zoujiatuo@localhost:5432/clinical")
-_engine = create_engine(url, pool_pre_ping=True)
+engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 
-def get_engine():
-    return _engine
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+
+def init_db():
+    # optional: you can call this at startup instead of using a separate db_init.py
+    Base.metadata.create_all(bind=engine)
+    print("DB initialized")
+
+
+def get_db():
+    db: Session = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()

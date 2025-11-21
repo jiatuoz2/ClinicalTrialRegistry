@@ -15,6 +15,7 @@ export default function Patient() {
   // New Self Report form
   const [symptoms, setSymptoms] = useState([{ symptom: "", severity: "" }]);
   const [medicationCompliance, setMedicationCompliance] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
   // Past Reports
   const [pastReports, setPastReports] = useState<any[]>([
@@ -73,14 +74,79 @@ export default function Patient() {
     setSymptoms([...symptoms, { symptom: "", severity: "" }]);
   };
 
-  const handleSaveBasicInfo = () => {
+  const handleSaveBasicInfo = async () => {
     if (!age || !gender || !medicalFile) {
       appendLog("Basic info incomplete.");
       return;
     }
-    appendLog("Basic info saved.");
-    setHasBasicInfo(true);
-    setIsEditing(false);
+
+    try {
+      setIsLoading(true);
+      const wallet = localStorage.getItem("patient_wallet") || "0xFAKE123";
+
+      // Build FormData for multipart upload
+      const formData = new FormData();
+      formData.append("wallet_address", wallet);
+      formData.append("age", String(age));      // FormData must use string values
+      formData.append("gender", gender);
+      formData.append("file", medicalFile);     // File goes directly here
+
+      const res = await fetch(`${backend}/patient/basic-info`, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+
+      const data = await res.json();
+      appendLog("Basic info saved.");
+
+      // Update UI with backend values
+      setHasBasicInfo(true);
+      setIsEditing(false);
+      setFileName(data.initial_record_url);
+
+    } catch (err) {
+      console.error(err);
+      appendLog("Failed to save basic info.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSubmitReport = async () => {
+    const wallet = localStorage.getItem("patient_wallet") || "0xFAKE123";
+
+    try {
+      const res = await fetch(`${backend}/self-report/submit`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          wallet_address: wallet,
+          symptoms: symptoms, 
+          medication_compliance: medicationCompliance, 
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        appendLog(`Submit report failed: ${err.detail || res.status}`);
+        return;
+      }
+
+      const data = await res.json();
+      appendLog("Self-report submitted successfully.");
+
+      console.log("Report created:", data);
+
+    } catch (err) {
+      console.error(err);
+      appendLog("Error submitting report.");
+    }
   };
 
   return (
@@ -162,6 +228,7 @@ export default function Patient() {
 
             <button
               onClick={handleSaveBasicInfo}
+              disabled={isLoading}
               className="w-full bg-gradient-to-r from-blue-600 to-cyan-500 text-white py-2 rounded-xl shadow-md hover:scale-105 transition"
             >
               Save Info
@@ -284,7 +351,9 @@ export default function Patient() {
                   </div>
                 </div>
 
-                <button className="bg-gradient-to-r from-blue-600 to-cyan-500 text-white py-2 px-6 rounded-xl shadow-md hover:scale-105 transition mb-8">
+                <button 
+                className="bg-gradient-to-r from-blue-600 to-cyan-500 text-white py-2 px-6 rounded-xl shadow-md hover:scale-105 transition mb-8"
+                onClick={() => handleSubmitReport()}>
                   Submit Report
                 </button>
               </div>

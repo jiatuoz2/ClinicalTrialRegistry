@@ -87,6 +87,46 @@ directly controls whether the hospital can view their data.
     CONTRACT_ADDRESS=0xYourDeployedContract
     ALCHEMY_SEPOLIA_URL=https://eth-sepolia.g.alchemy.com/v2/your_alchemy_key
 
+### database install
+#### 1. Install PostgreSQL
+Download and install from:  
+https://www.postgresql.org/download/
+
+Use default settings:
+- Port: **5432**
+- User: **postgres**
+- Set a password
+
+---
+
+#### 2. Create a Server (pgAdmin)
+Open **pgAdmin**, then:
+- Right-click **Servers → Create → Server**
+- Name it anything (e.g., `LocalDB`)
+- Connection tab:
+  - Host: `localhost`
+  - Port: `5432`
+  - Username: `postgres`
+  - Password: *your password*
+
+Click **Save**.
+
+---
+
+#### 3. Create a Database
+In pgAdmin:
+- Expand your server  
+- Right-click **Databases → Create → Database**
+- Name it: **clinical**
+
+---
+
+#### 4. Configure Backend Environment
+Create/edit `backend/.env`:
+
+```env
+DATABASE_URL=postgresql+psycopg2://postgres:YOUR_PASSWORD@localhost:5432/clinical
+```
 ------------------------------------------------------------------------
 
 ## Deploy Smart Contract
