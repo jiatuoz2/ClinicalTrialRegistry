@@ -162,7 +162,9 @@ export default function Patient() {
     }
   };
 
-  // ---------------- Submit Self Report ----------------
+  // ---------------------------------------------------
+  //  Submit Self Report  (OFF-CHAIN version)
+  // ---------------------------------------------------
   const handleSubmitReport = async () => {
     try {
       const payload = {
@@ -170,14 +172,13 @@ export default function Patient() {
         symptoms,
         medication_compliance: medicationCompliance,
       };
+
       const raw = JSON.stringify(payload);
       const contentHash = ethers.keccak256(ethers.toUtf8Bytes(raw));
 
-      appendLog("Uploading self-report hash to blockchain...");
-      const { contract } = await getContract();
-      const tx = await contract.uploadData(contentHash);
-      await tx.wait();
-      appendLog("Self-report hash stored on-chain.");
+      // ❗❗ Self-report DOES NOT go to blockchain anymore ❗❗
+      const fakeTxHash = "offchain-" + Date.now();
+      appendLog("Self-report stored off-chain. No blockchain transaction.");
 
       const res = await fetch(`${backend}/self-report/submit`, {
         method: "POST",
@@ -187,7 +188,7 @@ export default function Patient() {
           symptoms,
           medication_compliance: medicationCompliance,
           content_hash: contentHash,
-          tx_hash: tx.hash,
+          tx_hash: fakeTxHash, // important
         }),
       });
 
@@ -197,7 +198,7 @@ export default function Patient() {
         return;
       }
 
-      appendLog("Self-report submitted.");
+      appendLog("Self-report submitted (off-chain).");
       if (studyId) loadReports(studyId);
     } catch (err) {
       console.error(err);
