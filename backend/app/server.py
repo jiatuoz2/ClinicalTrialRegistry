@@ -1,43 +1,40 @@
-# backend/app/main.py
-from datetime import datetime
-from click import File
+# backend/app/server.py
+"""
+Business API routes for the Patient-Hospital system.
+
+Includes:
+- Basic patient info (with PDF upload)
+- Consent management (grant/revoke/status)
+- Self-report creation (ALWAYS create new)
+- Fetching patient self-report history
+"""
+
 import os
-from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form
-from fastapi.middleware.cors import CORSMiddleware
+import hashlib
+from datetime import datetime
+
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 
-from db import get_db, init_db
-from models import Patient, SelfReport
+from app.db import get_db
+from app.models import Patient, SelfReport
 
-app = FastAPI(title="Patient-Hospital Blockchain API")
+router = APIRouter()
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Optional: initialize tables at startup 
-@app.on_event("startup")
-def on_startup():
-    init_db()
-
-
-@app.get("/patient/basic-info/{wallet}")
+# ============================================================
+# GET patient basic info
+# ============================================================
+@router.get("/patient/basic-info/{wallet}")
 def get_patient_basic_info(wallet: str, db: Session = Depends(get_db)):
     """
-    GET /patient/basic-info/{wallet}
-    Used by your React fetch(`${backend}/patient/basic-info/${wallet}`)
+    Fetch basic info (age, gender, initial PDF URL, study_id, consent).
     """
 
     stmt = select(Patient).where(Patient.wallet_address == wallet)
-    patient = db.execute(stmt).scalar_one_or_none()  
+    patient = db.execute(stmt).scalar_one_or_none()
 
     if patient is None:
-        print(f"Patient with wallet {wallet} not found.")
         return {"exists": False}
 
     return {
@@ -45,10 +42,38 @@ def get_patient_basic_info(wallet: str, db: Session = Depends(get_db)):
         "age": patient.age,
         "gender": patient.gender,
         "initial_record_url": patient.initial_record_url,
+        "study_id": patient.study_id,
+        "authorized": patient.authorized,
     }
 
+# ============================================================
+# GET all patients
+# ============================================================
+@router.get("/patients")
+def list_patients(db: Session = Depends(get_db)):
 
-@app.post("/patient/basic-info")
+    stmt = select(Patient)
+    patients = db.execute(stmt).scalars().all()
+
+    result = []
+    for p in patients:
+        # report count
+        report_count = len(p.self_reports) if p.self_reports else 0
+
+        result.append({
+            "study_id": p.study_id,
+            "authorized": p.authorized,
+            "reports": report_count,
+            "last_update": p.updated_at.isoformat() if p.updated_at else None
+        })
+
+    return {"patients": result}
+
+
+# ============================================================
+# POST create/update patient basic info
+# ============================================================
+@router.post("/patient/basic-info")
 async def save_patient_basic_info(
     wallet_address: str = Form(...),
     age: int = Form(...),
@@ -57,64 +82,50 @@ async def save_patient_basic_info(
     db: Session = Depends(get_db),
 ):
     """
-    Create or update a patient's basic info and initial record.
-
-    - wallet_address: patient's on-chain identity
-    - age, gender: basic demographics
-    - file: initial medical record PDF
-
-    Server handles:
-    - created_at / updated_at (via model defaults)
-    - study_id = same as id (string)
-    - initial_record_url (file path)
-    - initial_record_hash (sha256 of file)
+    Store patient profile and initial PDF upload.
     """
 
-    # 1) Find or create patient by wallet_address
-    if not wallet_address:
-        raise HTTPException(status_code=400, detail="wallet_address required")
-    
+    # 1) Find or create patient
     stmt = select(Patient).where(Patient.wallet_address == wallet_address)
     patient = db.execute(stmt).scalar_one_or_none()
 
     if patient is None:
         patient = Patient(wallet_address=wallet_address)
         db.add(patient)
-        db.flush()  # assign patient.id without committing yet
+        db.flush()
 
-        # study_id == id (store as string or int as you defined)
-        patient.study_id = "CT-2025-" + str(patient.id)
+        year = datetime.now().year
+        padded_id = str(patient.id).zfill(4)
+        patient.study_id = f"CT-{year}-{padded_id}"
         patient.created_at = datetime.now()
 
-    # 2) Read file bytes and save to disk
+    # 2) Save file
     file_bytes = await file.read()
-
-    # Make uploads directory if not exists
     os.makedirs("uploads", exist_ok=True)
 
-    # Simple naming: wallet_initial.pdf (you can customize)
     filename = f"{wallet_address}_initial_record.pdf"
     filepath = os.path.join("uploads", filename)
 
     with open(filepath, "wb") as f:
         f.write(file_bytes)
-    
-    # TODO: need to store PDF as a URL externally
 
-    # TODO: 3) Compute hash of the file here 
-    
-    # 4) Update patient fields
+    # 3) Hash
+    file_hash = hashlib.sha256(file_bytes).hexdigest()
+
+    # 4) URL served via StaticFiles
+    file_url = f"http://127.0.0.1:8000/uploads/{filename}"
+
+    # 5) Update DB
     patient.age = age
     patient.gender = gender
-    patient.initial_record_url = filepath   
-    patient.initial_record_hash = "file_hash_hex_here"
-    patient.updated_at = datetime.now() 
+    patient.initial_record_url = file_url
+    patient.initial_record_hash = file_hash
+    patient.updated_at = datetime.now()
 
-    # 5) Commit changes
     db.commit()
     db.refresh(patient)
 
-    return {  
+    return {
         "id": patient.id,
         "study_id": patient.study_id,
         "wallet_address": patient.wallet_address,
@@ -122,53 +133,93 @@ async def save_patient_basic_info(
         "gender": patient.gender,
         "initial_record_url": patient.initial_record_url,
         "initial_record_hash": patient.initial_record_hash,
+        "authorized": patient.authorized,
     }
 
-@app.post("/self-report/submit")
-def create_self_report(
-    data: dict,
-    db: Session = Depends(get_db),
-):
-    # Expecting JSON body like:
-    # {
-    #   "wallet_address": "0xFAKE123",
-    #   "symptoms": [
-    #     { "symptom": "Headache", "severity": "moderate" },
-    #     { "symptom": "Nausea", "severity": "mild" }
-    #   ],
-    #   "medication_compliance": true
-    # }
+
+# ============================================================
+# Consent management (grant/revoke/status)
+# ============================================================
+@router.post("/patient/consent/grant")
+def grant_consent(data: dict, db: Session = Depends(get_db)):
+    wallet = data.get("wallet_address")
+    if not wallet:
+        raise HTTPException(400, "wallet_address required")
+
+    stmt = select(Patient).where(Patient.wallet_address == wallet)
+    patient = db.execute(stmt).scalar_one_or_none()
+    if not patient:
+        raise HTTPException(404, "Patient not found")
+
+    patient.authorized = True
+    patient.updated_at = datetime.now()
+    db.commit()
+
+    return {"status": "granted"}
+
+
+@router.post("/patient/consent/revoke")
+def revoke_consent(data: dict, db: Session = Depends(get_db)):
+    wallet = data.get("wallet_address")
+    if not wallet:
+        raise HTTPException(400, "wallet_address required")
+
+    stmt = select(Patient).where(Patient.wallet_address == wallet)
+    patient = db.execute(stmt).scalar_one_or_none()
+    if not patient:
+        raise HTTPException(404, "Patient not found")
+
+    patient.authorized = False
+    patient.updated_at = datetime.now()
+    db.commit()
+
+    return {"status": "revoked"}
+
+
+@router.get("/patient/consent/status/{wallet}")
+def consent_status(wallet: str, db: Session = Depends(get_db)):
+    stmt = select(Patient).where(Patient.wallet_address == wallet)
+    patient = db.execute(stmt).scalar_one_or_none()
+
+    if not patient:
+        return {"exists": False}
+
+    return {"exists": True, "authorized": patient.authorized}
+
+
+# ============================================================
+# POST create NEW self-report (never updates)
+# ============================================================
+@router.post("/self-report/submit")
+def create_self_report(data: dict, db: Session = Depends(get_db)):
+    """
+    ALWAYS create a new self-report record.
+    """
 
     wallet = data.get("wallet_address")
     symptoms = data.get("symptoms")
     medication_compliance = data.get("medication_compliance")
 
     if not wallet:
-        raise HTTPException(status_code=400, detail="wallet_address required")
+        raise HTTPException(400, "wallet_address required")
 
-    # 1. Find patient by wallet
     stmt = select(Patient).where(Patient.wallet_address == wallet)
     patient = db.execute(stmt).scalar_one_or_none()
 
-    if patient is None:
-        raise HTTPException(status_code=404, detail="Patient of wallet " + wallet + " not found")
-    
-    # check if a report exists for this patient
-    existing_report_stmt = select(SelfReport).where(SelfReport.patient_id == patient.id)
-    report = db.execute(existing_report_stmt).scalar_one_or_none()
-    if report is None:
-        # 2. Create new SelfReport row
-        report = SelfReport(patient_id=patient.id)
-        db.add(report)
-        db.flush()
-        report.created_at = datetime.now()
+    if not patient:
+        raise HTTPException(404, f"Patient with wallet {wallet} not found")
 
-    report.symptoms = symptoms
-    report.medication_compliance = medication_compliance
-    report.content_hash = "content_hash_here"
-    report.tx_hash = "tx_hash_here"
-    report.updated_at = datetime.now()
+    report = SelfReport(
+        patient_id=patient.id,
+        symptoms=symptoms,
+        medication_compliance=medication_compliance,
+        content_hash="content_hash_here",
+        tx_hash="tx_hash_here",
+        created_at=datetime.now(),
+        updated_at=datetime.now(),
+    )
 
+    db.add(report)
     db.commit()
     db.refresh(report)
 
@@ -177,38 +228,35 @@ def create_self_report(
         "patient_id": report.patient_id,
         "created_at": report.created_at,
         "updated_at": report.updated_at,
-        "content_hash": report.content_hash,
-        "tx_hash": report.tx_hash,
         "symptoms": report.symptoms,
         "medication_compliance": report.medication_compliance,
+        "content_hash": report.content_hash,
+        "tx_hash": report.tx_hash,
     }
 
-@app.get("/self-report/{study_id}")
-def get_patient_full_info(
-    study_id: str,
-    db: Session = Depends(get_db)
-):
+
+# ============================================================
+# GET all reports for a patient
+# ============================================================
+@router.get("/self-report/{study_id}")
+def get_patient_full_info(study_id: str, db: Session = Depends(get_db)):
     """
-    Return:
-    - Patient basic information
-    - All self-reports for that patient
+    Fetch:
+    - patient info
+    - all self-reports
     """
 
-    # 1. Get patient by study_id
     stmt = select(Patient).where(Patient.study_id == study_id)
     patient = db.execute(stmt).scalar_one_or_none()
 
     if patient is None:
-        raise HTTPException(status_code=404, detail="Patient not found")
+        raise HTTPException(404, "Patient not found")
 
-    # 2. Get all reports for this patient
     stmt_reports = select(SelfReport).where(SelfReport.patient_id == patient.id)
     reports = db.execute(stmt_reports).scalars().all()
 
-    # Format reports for JSON response
-    report_list = []
-    for r in reports:
-        report_list.append({
+    report_list = [
+        {
             "id": r.id,
             "created_at": r.created_at,
             "updated_at": r.updated_at,
@@ -216,9 +264,10 @@ def get_patient_full_info(
             "medication_compliance": r.medication_compliance,
             "content_hash": r.content_hash,
             "tx_hash": r.tx_hash,
-        })
+        }
+        for r in reports
+    ]
 
-    # 3. Return combined data
     return {
         "patient": {
             "id": patient.id,
@@ -228,9 +277,9 @@ def get_patient_full_info(
             "gender": patient.gender,
             "initial_record_url": patient.initial_record_url,
             "initial_record_hash": patient.initial_record_hash,
+            "authorized": patient.authorized,
             "created_at": patient.created_at,
             "updated_at": patient.updated_at,
         },
         "self_reports": report_list,
     }
- 

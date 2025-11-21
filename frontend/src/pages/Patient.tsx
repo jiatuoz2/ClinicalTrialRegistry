@@ -3,77 +3,106 @@ import React, { useState, useEffect } from "react";
 export default function Patient() {
   const backend = "http://127.0.0.1:8000";
 
+  // ------------- State -------------
   const [hasBasicInfo, setHasBasicInfo] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
 
-  // Basic Info
+  // Basic info
   const [age, setAge] = useState("");
   const [gender, setGender] = useState("");
   const [medicalFile, setMedicalFile] = useState<File | null>(null);
   const [fileName, setFileName] = useState("");
 
-  // New Self Report form
-  const [symptoms, setSymptoms] = useState([{ symptom: "", severity: "" }]);
-  const [medicationCompliance, setMedicationCompliance] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-
-  // Past Reports
-  const [pastReports, setPastReports] = useState<any[]>([
-    {
-      date: "2025-02-10",
-      medication_compliance: true,
-      symptoms: [
-        { symptom: "Headache", severity: "moderate" },
-        { symptom: "Fatigue", severity: "mild" },
-      ],
-    },
-    {
-      date: "2025-02-05",
-      medication_compliance: false,
-      symptoms: [{ symptom: "Nausea", severity: "mild" }],
-    },
-  ]);
-
-  const [drawerReport, setDrawerReport] = useState<any | null>(null);
+  // Consent
   const [consentActive, setConsentActive] = useState(false);
 
+  // Self-report
+  const [symptoms, setSymptoms] = useState([{ symptom: "", severity: "" }]);
+  const [medicationCompliance, setMedicationCompliance] = useState(false);
+
+  // Reports
+  const [pastReports, setPastReports] = useState<any[]>([]);
+  const [drawerReport, setDrawerReport] = useState<any | null>(null);
+  const [studyId, setStudyId] = useState("");
+
+  // Logs
   const [logs, setLogs] = useState<string[]>([]);
   const appendLog = (msg: string) =>
     setLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] ${msg}`]);
 
   const [activeTab, setActiveTab] = useState("selfReport");
 
-  useEffect(() => {
-    const wallet = localStorage.getItem("patient_wallet") || "0xFAKE123";
+  const wallet = localStorage.getItem("patient_wallet") || "0xFAKE123";
 
-    fetch(`${backend}/patient/basic-info/${wallet}`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.exists) {
-          setHasBasicInfo(true);
-          setAge(data.age);
-          setGender(data.gender);
-          setFileName(data.initial_record_url);
-        }
-      })
-      .catch(() => {
-        setHasBasicInfo(true);
-        setAge("32");
-        setGender("male");
-        setFileName("mock_medical_record.pdf");
-        setConsentActive(true);
-        setLogs([
-          "[10:23:12] Patient registered.",
-          "[10:24:01] Consent granted.",
-          "[10:25:44] Uploaded medical record hash: 0xABCD1234",
-        ]);
-      });
-  }, []);
-
-  const addSymptom = () => {
-    setSymptoms([...symptoms, { symptom: "", severity: "" }]);
+  // Helper: shorten filename
+  const shortFileName = (url: string) => {
+    if (!url) return "";
+    return url.split("/").pop();
   };
 
+  // ---------------- Load Basic Info ----------------
+  const loadBasicInfo = async () => {
+    try {
+      const res = await fetch(`${backend}/patient/basic-info/${wallet}`);
+      const data = await res.json();
+
+      if (!data.exists) {
+        setHasBasicInfo(false);
+        return;
+      }
+
+      setAge(data.age);
+      setGender(data.gender);
+      setFileName(data.initial_record_url);
+      setHasBasicInfo(true);
+
+      // Load study_id for reports
+      if (data.study_id) {
+        setStudyId(data.study_id);
+        loadReports(data.study_id);
+      }
+
+      // Load consent status
+      loadConsentStatus();
+
+    } catch (err) {
+      console.error(err);
+      appendLog("Failed to load basic info.");
+    }
+  };
+
+  // ---------------- Load Consent Status ----------------
+  const loadConsentStatus = async () => {
+    try {
+      const res = await fetch(`${backend}/patient/consent/status/${wallet}`);
+      const data = await res.json();
+
+      if (data.exists) {
+        setConsentActive(data.authorized === true);
+      }
+    } catch (err) {
+      console.error("Consent load failed");
+    }
+  };
+
+  // ---------------- Load Reports ----------------
+  const loadReports = async (sid: string) => {
+    try {
+      const res = await fetch(`${backend}/self-report/${sid}`);
+      if (!res.ok) return;
+
+      const data = await res.json();
+      setPastReports(data.self_reports || []);
+    } catch (err) {
+      console.error(err);
+      appendLog("Failed to load reports.");
+    }
+  };
+
+  useEffect(() => {
+    loadBasicInfo();
+  }, []);
+
+  // ---------------- Save Basic Info ----------------
   const handleSaveBasicInfo = async () => {
     if (!age || !gender || !medicalFile) {
       appendLog("Basic info incomplete.");
@@ -81,67 +110,59 @@ export default function Patient() {
     }
 
     try {
-      setIsLoading(true);
-      const wallet = localStorage.getItem("patient_wallet") || "0xFAKE123";
-
-      // Build FormData for multipart upload
       const formData = new FormData();
       formData.append("wallet_address", wallet);
-      formData.append("age", String(age));      // FormData must use string values
+      formData.append("age", String(age));
       formData.append("gender", gender);
-      formData.append("file", medicalFile);     // File goes directly here
+      formData.append("file", medicalFile);
 
       const res = await fetch(`${backend}/patient/basic-info`, {
         method: "POST",
         body: formData,
       });
 
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
-      }
-
       const data = await res.json();
-      appendLog("Basic info saved.");
-
-      // Update UI with backend values
-      setHasBasicInfo(true);
-      setIsEditing(false);
-      setFileName(data.initial_record_url);
-
-    } catch (err) {
-      console.error(err);
-      appendLog("Failed to save basic info.");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleSubmitReport = async () => {
-    const wallet = localStorage.getItem("patient_wallet") || "0xFAKE123";
-
-    try {
-      const res = await fetch(`${backend}/self-report/submit`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          wallet_address: wallet,
-          symptoms: symptoms, 
-          medication_compliance: medicationCompliance, 
-        }),
-      });
 
       if (!res.ok) {
-        const err = await res.json();
-        appendLog(`Submit report failed: ${err.detail || res.status}`);
+        appendLog("Failed to save basic info.");
         return;
       }
 
-      const data = await res.json();
-      appendLog("Self-report submitted successfully.");
+      appendLog("Basic info saved.");
+      setHasBasicInfo(true);
+      setFileName(data.initial_record_url);
 
-      console.log("Report created:", data);
+      setStudyId(data.study_id);
+      loadReports(data.study_id);
+
+    } catch (err) {
+      console.error(err);
+      appendLog("Error saving basic info.");
+    }
+  };
+
+  // ---------------- Submit Self Report ----------------
+  const handleSubmitReport = async () => {
+    try {
+      const res = await fetch(`${backend}/self-report/submit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          wallet_address: wallet,
+          symptoms,
+          medication_compliance: medicationCompliance,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        appendLog("Submit failed: " + data.detail);
+        return;
+      }
+
+      appendLog("Self-report submitted.");
+      if (studyId) loadReports(studyId);
 
     } catch (err) {
       console.error(err);
@@ -149,45 +170,90 @@ export default function Patient() {
     }
   };
 
+  // ---------------- Consent: Grant ----------------
+  const handleGrant = async () => {
+    const res = await fetch(`${backend}/patient/consent/grant`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ wallet_address: wallet }),
+    });
+
+    if (res.ok) {
+      setConsentActive(true);
+      appendLog("Consent granted.");
+    }
+  };
+
+  // ---------------- Consent: Revoke ----------------
+  const handleRevoke = async () => {
+    const res = await fetch(`${backend}/patient/consent/revoke`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ wallet_address: wallet }),
+    });
+
+    if (res.ok) {
+      setConsentActive(false);
+      appendLog("Consent revoked.");
+    }
+  };
+
+  // ---------------- Add Symptom ----------------
+  const addSymptom = () => {
+    setSymptoms([...symptoms, { symptom: "", severity: "" }]);
+  };
+
   return (
     <div className="min-h-screen w-full flex p-10 relative bg-gradient-to-br from-[#f6faff] via-[#e9f3ff] to-[#d9eaff] overflow-hidden">
 
-      {/* Background visuals */}
+      {/* Background Decoration */}
       <div className="absolute -top-32 -left-32 w-[480px] h-[480px] bg-blue-200 rounded-full blur-[130px] opacity-40 animate-pulse"></div>
       <div className="absolute bottom-0 right-0 w-[450px] h-[450px] bg-cyan-200 rounded-full blur-[160px] opacity-35 animate-pulse"></div>
-      <div
-        className="absolute inset-0 opacity-[0.05] pointer-events-none"
-        style={{
-          backgroundImage:
-            "linear-gradient(to right, rgba(0,0,0,0.10) 1px, transparent 1px), linear-gradient(to bottom, rgba(0,0,0,0.10) 1px, transparent 1px)",
-          backgroundSize: "55px 55px",
-        }}
-      ></div>
 
-      {/* LEFT PROFILE */}
+      {/* LEFT PROFILE PANEL */}
       <div className="relative z-10 w-[320px] mr-10 backdrop-blur-xl bg-white/70 shadow-2xl rounded-3xl p-6 h-fit animate-fadeIn">
 
         <h2 className="text-xl font-bold text-blue-700 mb-4">Patient Profile</h2>
 
-        {hasBasicInfo && !isEditing && (
+        {/* Basic Info */}
+        {hasBasicInfo && (
           <div className="space-y-2">
+
             <p><strong>Age:</strong> {age}</p>
             <p><strong>Gender:</strong> {gender}</p>
-            <p><strong>Medical File:</strong> {fileName}</p>
 
+            <p className="flex items-center gap-2">
+              <strong>Medical File:</strong>
+              {fileName ? (
+                <a
+                  href={fileName}
+                  target="_blank"
+                  className="text-blue-600 underline truncate max-w-[160px]"
+                  rel="noopener noreferrer"
+                >
+                  {shortFileName(fileName)}
+                </a>
+              ) : "None"}
+            </p>
+
+            {/* Logout Button */}
             <button
-              onClick={() => setIsEditing(true)}
-              className="w-full bg-gradient-to-r from-blue-600 to-cyan-500 text-white py-2 rounded-xl shadow-md hover:scale-105 transition"
+              onClick={() => {
+                localStorage.removeItem("patient_wallet");
+                window.location.href = "/";
+              }}
+              className="mt-6 w-full bg-gradient-to-r from-blue-600 to-cyan-500 text-white py-2 rounded-xl shadow-md hover:scale-105 transition"
             >
-              Edit Info
+              Logout
             </button>
           </div>
         )}
 
-        {(!hasBasicInfo || isEditing) && (
+        {/* If basic info is NOT filled yet */}
+        {!hasBasicInfo && (
           <div className="mt-4 space-y-3 animate-fadeIn">
             <input
-              className="w-full p-3 border rounded-xl focus:ring-4 focus:ring-blue-200/50 transition"
+              className="w-full p-3 border rounded-xl"
               type="number"
               placeholder="Age"
               value={age}
@@ -195,7 +261,7 @@ export default function Patient() {
             />
 
             <select
-              className="w-full p-3 border rounded-xl focus:ring-4 focus:ring-blue-200/50 transition"
+              className="w-full p-3 border rounded-xl"
               value={gender}
               onChange={(e) => setGender(e.target.value)}
             >
@@ -204,11 +270,9 @@ export default function Patient() {
               <option value="female">Female</option>
             </select>
 
+            {/* PDF Upload */}
             <div
-              className="
-                border-2 border-dashed border-blue-300 rounded-2xl p-6 text-center cursor-pointer
-                bg-white/60 hover:bg-blue-50/40 hover:border-blue-500 transition
-              "
+              className="border-2 border-dashed border-blue-300 rounded-2xl p-6 text-center cursor-pointer"
               onClick={() => document.getElementById("fileUpload")?.click()}
             >
               <p className="text-blue-700 font-semibold">
@@ -228,16 +292,16 @@ export default function Patient() {
 
             <button
               onClick={handleSaveBasicInfo}
-              disabled={isLoading}
-              className="w-full bg-gradient-to-r from-blue-600 to-cyan-500 text-white py-2 rounded-xl shadow-md hover:scale-105 transition"
+              className="w-full bg-gradient-to-r from-blue-600 to-cyan-500 text-white py-2 rounded-xl shadow-md"
             >
               Save Info
             </button>
           </div>
         )}
+
       </div>
 
-      {/* RIGHT PANEL */}
+      {/* RIGHT MAIN PANEL */}
       <div className="relative z-10 flex-1 backdrop-blur-xl bg-white/70 shadow-2xl rounded-3xl p-8 animate-fadeIn">
 
         {!hasBasicInfo && (
@@ -259,17 +323,18 @@ export default function Patient() {
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`pb-2 text-lg font-medium transition 
-                    ${activeTab === tab.id
+                  className={`pb-2 text-lg font-medium ${
+                    activeTab === tab.id
                       ? "text-blue-700 border-b-4 border-blue-500"
-                      : "text-gray-600 hover:text-blue-600"}`}
+                      : "text-gray-600 hover:text-blue-600"
+                  }`}
                 >
                   {tab.name}
                 </button>
               ))}
             </div>
 
-            {/* TAB: Self Report */}
+            {/* Self Report Tab */}
             {activeTab === "selfReport" && (
               <div className="animate-fadeIn">
 
@@ -280,7 +345,7 @@ export default function Patient() {
                 {symptoms.map((row, i) => (
                   <div key={i} className="grid grid-cols-2 gap-4 mb-3">
                     <input
-                      className="p-3 border rounded-xl focus:ring-blue-200 transition"
+                      className="p-3 border rounded-xl"
                       placeholder="Symptom"
                       value={row.symptom}
                       onChange={(e) => {
@@ -291,7 +356,7 @@ export default function Patient() {
                     />
 
                     <select
-                      className="p-3 border rounded-xl focus:ring-blue-200 transition text-gray-700"
+                      className="p-3 border rounded-xl text-gray-700"
                       value={row.severity}
                       onChange={(e) => {
                         const s = [...symptoms];
@@ -302,7 +367,6 @@ export default function Patient() {
                       <option value="" disabled hidden>
                         Severity
                       </option>
-
                       <option value="mild">Mild</option>
                       <option value="moderate">Moderate</option>
                       <option value="severe">Severe</option>
@@ -312,7 +376,7 @@ export default function Patient() {
 
                 <button
                   onClick={addSymptom}
-                  className="text-blue-700 font-medium mb-4 hover:text-blue-900 transition cursor-pointer"
+                  className="text-blue-700 font-medium mb-4 cursor-pointer"
                 >
                   + Add Symptom
                 </button>
@@ -324,26 +388,24 @@ export default function Patient() {
 
                   <div className="inline-flex rounded-full bg-gray-100 p-1">
                     <button
-                      type="button"
                       onClick={() => setMedicationCompliance(true)}
                       className={
-                        "px-4 py-1 rounded-full text-sm font-medium transition " +
+                        "px-4 py-1 rounded-full text-sm font-medium " +
                         (medicationCompliance
-                          ? "bg-blue-600 text-white shadow"
-                          : "text-gray-600 hover:text-blue-700")
+                          ? "bg-blue-600 text-white"
+                          : "text-gray-600")
                       }
                     >
                       Yes
                     </button>
 
                     <button
-                      type="button"
                       onClick={() => setMedicationCompliance(false)}
                       className={
-                        "px-4 py-1 rounded-full text-sm font-medium transition " +
+                        "px-4 py-1 rounded-full text-sm font-medium " +
                         (!medicationCompliance
                           ? "bg-red-100 text-red-700"
-                          : "text-gray-600 hover:text-red-700")
+                          : "text-gray-600")
                       }
                     >
                       No
@@ -352,14 +414,15 @@ export default function Patient() {
                 </div>
 
                 <button 
-                className="bg-gradient-to-r from-blue-600 to-cyan-500 text-white py-2 px-6 rounded-xl shadow-md hover:scale-105 transition mb-8"
-                onClick={() => handleSubmitReport()}>
+                  className="bg-gradient-to-r from-blue-600 to-cyan-500 text-white py-2 px-6 rounded-xl shadow-md"
+                  onClick={handleSubmitReport}
+                >
                   Submit Report
                 </button>
               </div>
             )}
 
-            {/* TAB: My Reports */}
+            {/* My Reports Tab */}
             {activeTab === "myReports" && (
               <div className="animate-fadeIn">
                 <table className="w-full text-left bg-white/60 rounded-xl overflow-hidden">
@@ -373,11 +436,10 @@ export default function Patient() {
                   </thead>
                   <tbody>
                     {pastReports.map((r, i) => (
-                      <tr
-                        key={i}
-                        className="border-b hover:bg-blue-50/40 transition"
-                      >
-                        <td className="p-3">{r.date}</td>
+                      <tr key={i} className="border-b hover:bg-blue-50/40">
+                        <td className="p-3">
+                          {new Date(r.created_at).toLocaleString()}
+                        </td>
                         <td className="p-3">{r.symptoms.length} symptoms</td>
                         <td className="p-3">
                           {r.medication_compliance ? (
@@ -399,24 +461,26 @@ export default function Patient() {
               </div>
             )}
 
-            {/* TAB: Consent */}
+            {/* Consent Tab */}
             {activeTab === "consent" && (
               <div className="animate-fadeIn">
-                <p className="mb-3">
+                <p className="mb-3 text-lg">
                   Status:{" "}
-                  <strong>{consentActive ? "Active" : "Not Granted"}</strong>
+                  <strong>
+                    {consentActive ? "Active" : "Not Granted"}
+                  </strong>
                 </p>
 
                 <div className="flex gap-4">
                   <button
-                    onClick={() => setConsentActive(true)}
-                    className="bg-gradient-to-r from-blue-600 to-cyan-500 text-white py-2 px-6 rounded-xl shadow-md hover:scale-105 transition"
+                    onClick={handleGrant}
+                    className="bg-gradient-to-r from-blue-600 to-cyan-500 text-white py-2 px-6 rounded-xl shadow-md"
                   >
                     Grant Consent
                   </button>
 
                   <button
-                    onClick={() => setConsentActive(false)}
+                    onClick={handleRevoke}
                     className="bg-red-500 text-white py-2 px-6 rounded-xl shadow-md"
                   >
                     Revoke
@@ -425,7 +489,7 @@ export default function Patient() {
               </div>
             )}
 
-            {/* TAB: Logs */}
+            {/* Logs */}
             {activeTab === "logs" && (
               <div className="animate-fadeIn">
                 <div className="bg-white/50 p-4 rounded-xl h-64 overflow-auto text-sm">
@@ -439,11 +503,11 @@ export default function Patient() {
         )}
       </div>
 
-      {/* Drawer View Detail */}
+      {/* Drawer */}
       {drawerReport && (
         <div className="fixed top-0 right-0 w-[420px] h-full bg-white shadow-xl p-6 animate-fadeIn z-50">
           <h2 className="text-xl font-bold mb-4">
-            Report Detail — {drawerReport.date}
+            Report Detail — {new Date(drawerReport.created_at).toLocaleString()}
           </h2>
 
           <div className="mb-6">
