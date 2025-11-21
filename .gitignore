@@ -1,2 +1,5 @@
 .env
 uploads/
+
+# ignore node modules in frontend
+./frontend/node_modules/

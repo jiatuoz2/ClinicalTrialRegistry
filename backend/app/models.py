@@ -32,6 +32,8 @@ class Patient(Base):
     age = Column(Integer, nullable=True)
     gender = Column(String, nullable=True)
 
+    authorized = Column(Boolean, default=True, nullable=False)
+
     # Off-chain initial record
     initial_record_url = Column(Text, nullable=True)
     initial_record_hash = Column(String, nullable=True)

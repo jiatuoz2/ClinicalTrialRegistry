@@ -182,3 +182,55 @@ def create_self_report(
         "symptoms": report.symptoms,
         "medication_compliance": report.medication_compliance,
     }
+
+@app.get("/self-report/{study_id}")
+def get_patient_full_info(
+    study_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Return:
+    - Patient basic information
+    - All self-reports for that patient
+    """
+
+    # 1. Get patient by study_id
+    stmt = select(Patient).where(Patient.study_id == study_id)
+    patient = db.execute(stmt).scalar_one_or_none()
+
+    if patient is None:
+        raise HTTPException(status_code=404, detail="Patient not found")
+
+    # 2. Get all reports for this patient
+    stmt_reports = select(SelfReport).where(SelfReport.patient_id == patient.id)
+    reports = db.execute(stmt_reports).scalars().all()
+
+    # Format reports for JSON response
+    report_list = []
+    for r in reports:
+        report_list.append({
+            "id": r.id,
+            "created_at": r.created_at,
+            "updated_at": r.updated_at,
+            "symptoms": r.symptoms,
+            "medication_compliance": r.medication_compliance,
+            "content_hash": r.content_hash,
+            "tx_hash": r.tx_hash,
+        })
+
+    # 3. Return combined data
+    return {
+        "patient": {
+            "id": patient.id,
+            "study_id": patient.study_id,
+            "wallet_address": patient.wallet_address,
+            "age": patient.age,
+            "gender": patient.gender,
+            "initial_record_url": patient.initial_record_url,
+            "initial_record_hash": patient.initial_record_hash,
+            "created_at": patient.created_at,
+            "updated_at": patient.updated_at,
+        },
+        "self_reports": report_list,
+    }
+ 
