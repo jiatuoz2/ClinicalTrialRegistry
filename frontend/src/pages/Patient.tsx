@@ -163,7 +163,7 @@ export default function Patient() {
   };
 
   // ---------------------------------------------------
-  //  Submit Self Report  (OFF-CHAIN version)
+  //  Submit Self Report
   // ---------------------------------------------------
   const handleSubmitReport = async () => {
     try {
@@ -176,7 +176,6 @@ export default function Patient() {
       const raw = JSON.stringify(payload);
       const contentHash = ethers.keccak256(ethers.toUtf8Bytes(raw));
 
-      // ❗❗ Self-report DOES NOT go to blockchain anymore ❗❗
       const fakeTxHash = "offchain-" + Date.now();
       appendLog("Self-report stored off-chain. No blockchain transaction.");
 
@@ -188,7 +187,7 @@ export default function Patient() {
           symptoms,
           medication_compliance: medicationCompliance,
           content_hash: contentHash,
-          tx_hash: fakeTxHash, // important
+          tx_hash: fakeTxHash,
         }),
       });
 

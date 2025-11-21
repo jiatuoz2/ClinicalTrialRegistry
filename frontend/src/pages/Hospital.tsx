@@ -26,7 +26,7 @@ export default function Hospital() {
     url ? url.split("/").pop() || url : "";
 
   // ============================================================
-  // Contract helper (unchanged)
+  // Contract helper
   // ============================================================
   const callViewOnChain = async (patientWallet: string, purpose: string) => {
     try {
@@ -69,7 +69,7 @@ export default function Hospital() {
   };
 
   // ============================================================
-  // Fetch patient list (unchanged)
+  // Fetch patient list
   // ============================================================
   useEffect(() => {
     const fetchPatients = () => {
@@ -85,7 +85,7 @@ export default function Hospital() {
   }, []);
 
   // ============================================================
-  // Fetch single patient (unchanged)
+  // Fetch single patient
   // ============================================================
   const fetchPatientFromApi = async (id: string) => {
     try {
@@ -118,7 +118,7 @@ export default function Hospital() {
   };
 
   // ============================================================
-  // Auto refresh patient (unchanged)
+  // Auto refresh patient
   // ============================================================
   useEffect(() => {
     if (!patientData) return;
@@ -149,7 +149,7 @@ export default function Hospital() {
   };
 
   // ============================================================
-  // Confirm purpose (UNCHANGED LOGIC)
+  // Confirm purpose
   // ============================================================
   const confirmPurpose = async () => {
     if (!pendingPatientId) return;
@@ -417,7 +417,7 @@ export default function Hospital() {
           <div>
             <strong>Symptoms:</strong>
             <ul className="list-disc ml-6 mt-2">
-              {drawerReport.symptoms.map((s, i) => (
+              {drawerReport.symptoms.map((s: any, i: any) => (
                 <li key={i}>
                   {s.symptom} ({s.severity})
                 </li>

@@ -39,7 +39,7 @@ export default function Login() {
           return;
         }
 
-        // ★★★ Save wallet for patient
+        // Save wallet for patient
         localStorage.setItem("patient_wallet", userAddress);
 
         navigate("/patient");
