@@ -3,12 +3,13 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from app.db import init_db
+from app.db import engine
+from app.models import Base
 from app.server import router as api_router
 
 app = FastAPI(title="Patient-Hospital Blockchain API")
 
-# --- CORS ---
+# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -17,13 +18,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- Uploads static folder ---
+# Static files
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 # --- Init DB ---
 @app.on_event("startup")
 def on_startup():
-    init_db()
+    Base.metadata.create_all(bind=engine)
 
-# --- Include all APIs from server.py ---
+# APIs
 app.include_router(api_router)

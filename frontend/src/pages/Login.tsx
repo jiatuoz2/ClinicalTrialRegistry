@@ -12,28 +12,43 @@ export default function Login() {
     }
 
     try {
+      // Ask for permission
       await window.ethereum.request({
         method: "wallet_requestPermissions",
         params: [{ eth_accounts: {} }],
       });
 
+      // Get accounts
       const accounts = await window.ethereum.request({
         method: "eth_requestAccounts",
-      });
+      }) as string[];
+
+      if (!accounts || accounts.length === 0) {
+        throw new Error("No MetaMask accounts found.");
+      }
 
       const userAddress = accounts[0].toLowerCase();
       console.log(`Connected wallet: ${userAddress}`);
 
+      /* -----------------------------
+         PATIENT LOGIN
+      ------------------------------ */
       if (role === "patient") {
         if (HOSPITAL_ADDRESS && userAddress === HOSPITAL_ADDRESS) {
           alert("The hospital wallet cannot log in as a patient.");
           return;
         }
 
+        // ★★★ Save wallet for patient
+        localStorage.setItem("patient_wallet", userAddress);
+
         navigate("/patient");
         return;
       }
 
+      /* -----------------------------
+         HOSPITAL LOGIN
+      ------------------------------ */
       if (role === "hospital") {
         if (!HOSPITAL_ADDRESS) {
           alert("Hospital address not configured in .env");
@@ -45,7 +60,10 @@ export default function Login() {
           return;
         }
 
+        localStorage.setItem("hospital_wallet", userAddress);
+
         navigate("/hospital");
+        return;
       }
     } catch (err) {
       console.error("MetaMask login failed:", err);
@@ -70,8 +88,8 @@ export default function Login() {
         </h1>
 
         <p className="text-xl mt-4 text-gray-600 z-10">
-          A secure, blockchain-powered system enabling transparent, auditable, and
-          patient-controlled clinical trial data sharing.
+          A secure, blockchain-powered system enabling transparent,
+          auditable, and patient-controlled clinical trial data sharing.
         </p>
 
         <ul className="mt-8 text-gray-700 text-lg space-y-3 z-10">
@@ -134,11 +152,9 @@ export default function Login() {
             50% { transform: translateY(25px) scale(1.05); }
             100% { transform: translateY(0px) scale(1); }
           }
-
           .animate-floating {
             animation: floating 6s ease-in-out infinite;
           }
-
           .animate-floating-delayed {
             animation: floating 7s ease-in-out infinite;
             animation-delay: 1.5s;

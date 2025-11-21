@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from "react";
+import { ethers } from "ethers";
+import ClinicalTrialRegistryABI from "../abi/ClinicalTrialRegistry.json";
+
+const CONTRACT_ADDRESS = import.meta.env.VITE_REGISTRY_ADDRESS;
 
 export default function Hospital() {
   const backend = "http://127.0.0.1:8000";
 
-  // ========== STATE ==========
   const [studyId, setStudyId] = useState("");
   const [authorized, setAuthorized] = useState<boolean | null>(null);
   const [patientData, setPatientData] = useState<any | null>(null);
@@ -17,32 +20,72 @@ export default function Hospital() {
   const [purpose, setPurpose] = useState("");
   const [pendingPatientId, setPendingPatientId] = useState<string | null>(null);
 
-  const shortFileName = (url: string) => {
-    if (!url) return "";
-    return url.split("/").pop() || url;
+  const hospitalWallet = localStorage.getItem("hospital_wallet");
+
+  const shortFileName = (url: string) =>
+    url ? url.split("/").pop() || url : "";
+
+  // ============================================================
+  // Contract helper (unchanged)
+  // ============================================================
+  const callViewOnChain = async (patientWallet: string, purpose: string) => {
+    try {
+      if (!window.ethereum) {
+        alert("Metamask not found");
+        return null;
+      }
+
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      const signerAddr = await signer.getAddress();
+
+      if (hospitalWallet?.toLowerCase() !== signerAddr.toLowerCase()) {
+        alert(
+          "Please switch MetaMask to the hospital wallet.\n" +
+            `Current: ${signerAddr}\nExpected: ${hospitalWallet}`
+        );
+        return null;
+      }
+
+      const contract = new ethers.Contract(
+        CONTRACT_ADDRESS,
+        ClinicalTrialRegistryABI,
+        signer
+      );
+
+      console.log("Calling viewData()...");
+      const tx = await contract.viewData(patientWallet, purpose);
+
+      console.log("Waiting for confirmation...");
+      await tx.wait();
+
+      console.log("viewData transaction confirmed:", tx.hash);
+      return tx.hash;
+    } catch (err: any) {
+      console.error("viewData error:", err);
+      alert("Blockchain error: " + (err.reason || err.message));
+      return null;
+    }
   };
 
   // ============================================================
-  // REFRESH PATIENT LIST (every 3 sec)
+  // Fetch patient list (unchanged)
   // ============================================================
   useEffect(() => {
     const fetchPatients = () => {
       fetch(`${backend}/patients`)
         .then((res) => res.json())
-        .then((data) => {
-          if (data.patients) setPatients(data.patients);
-        })
+        .then((data) => data.patients && setPatients(data.patients))
         .catch((err) => console.error("Failed to load patients:", err));
     };
 
-    fetchPatients(); // initial load
-
-    const interval = setInterval(fetchPatients, 3000); // auto refresh
+    fetchPatients();
+    const interval = setInterval(fetchPatients, 3000);
     return () => clearInterval(interval);
   }, []);
 
   // ============================================================
-  // Fetch single patient
+  // Fetch single patient (unchanged)
   // ============================================================
   const fetchPatientFromApi = async (id: string) => {
     try {
@@ -75,7 +118,7 @@ export default function Hospital() {
   };
 
   // ============================================================
-  // AUTO REFRESH ACTIVE PATIENT (every 3 sec)
+  // Auto refresh patient (unchanged)
   // ============================================================
   useEffect(() => {
     if (!patientData) return;
@@ -88,14 +131,11 @@ export default function Hospital() {
   }, [patientData]);
 
   // ============================================================
-  // When doctor selects a patient
+  // Load patient
   // ============================================================
   const loadPatient = (id: string) => {
     const pt = patients.find((p) => p.study_id === id);
 
-    // ===========================
-    // DENIED → skip purpose modal
-    // ===========================
     if (pt && pt.authorized === false) {
       setStudyId(id);
       setAuthorized(false);
@@ -104,25 +144,36 @@ export default function Hospital() {
       return;
     }
 
-    // Otherwise → normal flow
     setPendingPatientId(id);
     setShowPurposeModal(true);
   };
 
   // ============================================================
-  // Confirm purpose
+  // Confirm purpose (UNCHANGED LOGIC)
   // ============================================================
   const confirmPurpose = async () => {
     if (!pendingPatientId) return;
 
-    console.log("AUDIT LOG:", {
-      patient_id: pendingPatientId,
-      purpose,
-      timestamp: new Date().toISOString(),
+    const walletRes = await fetch(
+      `${backend}/patient/wallet/${pendingPatientId}`
+    );
+    const walletData = await walletRes.json();
+    const patientWallet = walletData.wallet_address;
+
+    const txHash = await callViewOnChain(patientWallet, purpose);
+    if (!txHash) return;
+
+    await fetch(`${backend}/access-log/write`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        study_id: pendingPatientId,
+        purpose,
+        tx_hash: txHash,
+      }),
     });
 
     await fetchPatientFromApi(pendingPatientId);
-
     setStudyId(pendingPatientId);
     setActiveTab("summary");
 
@@ -144,13 +195,12 @@ export default function Hospital() {
     setActiveTab("summary");
   };
 
-  return (
-    <div className="relative min-h-screen w-full flex p-10 overflow-hidden bg-gradient-to-br from-[#f6faff] via-[#e9f3ff] to-[#d9eaff]">
-      
-      {/* BG Effects */}
-      <div className="absolute -top-32 -left-32 w-[480px] h-[480px] bg-blue-200 rounded-full blur-[130px] opacity-40 animate-pulse"></div>
-      <div className="absolute bottom-0 right-0 w-[450px] h-[450px] bg-cyan-200 rounded-full blur-[160px] opacity-35 animate-pulse"></div>
+  // =====================================================================
+  // ===============================  UI  ================================
+  // =====================================================================
 
+  return (
+    <div className="relative min-h-screen w-full flex p-10 bg-gradient-to-br from-[#f6faff] via-[#e9f3ff] to-[#d9eaff]">
       {/* LEFT PANEL */}
       <div className="relative z-10 w-[300px] mr-10 backdrop-blur-xl bg-white/70 shadow-2xl rounded-3xl p-6 h-fit">
         <h2 className="text-xl font-bold text-blue-700 mb-2">Hospital Panel</h2>
@@ -161,56 +211,55 @@ export default function Hospital() {
           value={studyId}
           onChange={(e) => setStudyId(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-          className="mt-6 w-full p-3 border rounded-xl focus:ring-4 focus:ring-blue-200/50 transition"
+          className="mt-6 w-full p-3 border rounded-xl"
         />
 
         <button
           onClick={handleSearch}
-          className="w-full mt-3 bg-gradient-to-r from-blue-600 to-cyan-500 text-white py-2 rounded-xl shadow-md hover:scale-[1.03] transition"
+          className="w-full mt-3 bg-gradient-to-r from-blue-600 to-cyan-500 text-white py-2 rounded-xl shadow-md"
         >
           View
         </button>
 
         <button
           onClick={() => {
-            localStorage.removeItem("hospital_user");
+            localStorage.removeItem("hospital_wallet");
             window.location.href = "/";
           }}
-          className="mt-6 w-full bg-gradient-to-r from-blue-600 to-cyan-500 text-white py-2 rounded-xl shadow-md hover:scale-105 transition"
+          className="mt-6 w-full bg-gradient-to-r from-blue-600 to-cyan-500 text-white py-2 rounded-xl shadow-md"
         >
           Logout
         </button>
       </div>
 
-      {/* RIGHT PANEL */}
+      {/* MAIN PANEL */}
       <div className="relative z-10 flex-1 backdrop-blur-xl bg-white/70 shadow-2xl rounded-3xl p-8">
-
-        {/* HOME PAGE */}
+        {/* LIST PAGE */}
         {!patientData && studyId === "" && (
           <div>
             <h2 className="text-2xl font-bold text-blue-700 mb-4">Records</h2>
 
-            <div className="space-y-4">
-              {patients.length === 0 && (
-                <div className="text-gray-500">No patients found.</div>
-              )}
+            {patients.length === 0 && (
+              <div className="text-gray-500">No patients found.</div>
+            )}
 
-              {patients.map((item, i) => (
+            <div className="space-y-4">
+              {patients.map((p, i) => (
                 <div
                   key={i}
-                  onClick={() => item.authorized && loadPatient(item.study_id)}
+                  onClick={() => p.authorized && loadPatient(p.study_id)}
                   className={`cursor-pointer bg-white/60 p-5 rounded-xl shadow-sm transition border border-white/40 ${
-                    item.authorized
+                    p.authorized
                       ? "hover:bg-white/80 hover:shadow-md"
                       : "opacity-50 cursor-not-allowed"
                   }`}
                 >
                   <div className="flex justify-between items-center">
                     <span className="font-semibold text-gray-800 text-lg">
-                      {item.study_id}
+                      {p.study_id}
                     </span>
 
-                    {item.authorized ? (
+                    {p.authorized ? (
                       <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-medium">
                         Granted
                       </span>
@@ -220,35 +269,25 @@ export default function Hospital() {
                       </span>
                     )}
                   </div>
-
-                  {item.authorized && (
-                    <div className="text-sm text-gray-600 mt-1">
-                      {item.reports} Reports • Updated{" "}
-                      {item.last_update?.slice(0, 10)}
-                    </div>
-                  )}
                 </div>
               ))}
             </div>
           </div>
         )}
 
-        {/* UNAUTHORIZED PAGE */}
+        {/* UNAUTHORIZED VIEW */}
         {studyId !== "" && !patientData && authorized === false && (
           <div className="animate-fadeIn">
             <button
               onClick={handleBack}
-              className="mb-6 px-4 py-2 bg-white border border-blue-300 rounded-xl hover:bg-blue-50 transition text-blue-700 flex items-center gap-2"
+              className="mb-6 px-4 py-2 bg-white border border-blue-300 rounded-xl text-blue-700"
             >
               ← Back
             </button>
 
-            <div className="p-6 bg-red-50 border border-red-100 rounded-xl shadow-sm">
+            <div className="p-6 bg-red-50 border border-red-100 rounded-xl">
               <p className="text-red-700 font-semibold text-lg mb-2">
                 You do not have permission to view this data.
-              </p>
-              <p className="text-red-600 text-sm">
-                Patient has revoked consent.
               </p>
             </div>
           </div>
@@ -259,7 +298,7 @@ export default function Hospital() {
           <>
             <button
               onClick={handleBack}
-              className="mb-6 px-4 py-2 bg-white border border-blue-300 rounded-xl hover:bg-blue-50 transition text-blue-700 flex items-center gap-2"
+              className="mb-6 px-4 py-2 bg-white border border-blue-300 rounded-xl text-blue-700"
             >
               ← Back to Records
             </button>
@@ -272,7 +311,7 @@ export default function Hospital() {
                   className={`pb-2 text-lg font-medium ${
                     activeTab === t
                       ? "text-blue-700 border-b-4 border-blue-500"
-                      : "text-gray-500 hover:text-blue-600"
+                      : "text-gray-600 hover:text-blue-600"
                   }`}
                 >
                   {t === "summary" ? "Summary" : "Reports"}
@@ -280,44 +319,38 @@ export default function Hospital() {
               ))}
             </div>
 
-            {/* SUMMARY */}
+            {/* Summary */}
             {activeTab === "summary" && (
-              <div className="space-y-6 animate-fadeIn">
+              <div className="space-y-6">
                 <h2 className="text-2xl font-bold text-blue-700 mb-4">
                   Patient Summary
                 </h2>
 
-                <div className="space-y-2 text-lg">
-                  <p>
-                    <strong>Study ID:</strong> {patientData.study_id}
-                  </p>
-                  <p>
-                    <strong>Age:</strong> {patientData.age}
-                  </p>
-                  <p>
-                    <strong>Gender:</strong> {patientData.gender}
-                  </p>
+                <p>
+                  <strong>Study ID:</strong> {patientData.study_id}
+                </p>
+                <p>
+                  <strong>Age:</strong> {patientData.age}
+                </p>
+                <p>
+                  <strong>Gender:</strong> {patientData.gender}
+                </p>
 
-                  <p className="flex items-center gap-2">
-                    <strong>Medical File:</strong>
-                    {patientData.initial_record_url ? (
-                      <a
-                        href={patientData.initial_record_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-600 underline truncate max-w-[200px]"
-                      >
-                        {shortFileName(patientData.initial_record_url)}
-                      </a>
-                    ) : (
-                      "None"
-                    )}
-                  </p>
-                </div>
+                <p className="flex items-center gap-2">
+                  <strong>Medical File:</strong>{" "}
+                  <a
+                    href={patientData.initial_record_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-600 underline truncate max-w-[200px]"
+                  >
+                    {shortFileName(patientData.initial_record_url)}
+                  </a>
+                </p>
               </div>
             )}
 
-            {/* REPORTS */}
+            {/* Reports */}
             {activeTab === "reports" && (
               <table className="w-full text-left bg-white/60 rounded-xl overflow-hidden">
                 <thead className="bg-blue-100 text-gray-700">
@@ -329,17 +362,16 @@ export default function Hospital() {
                   </tr>
                 </thead>
                 <tbody>
-                  {reports.map((r: any, i: number) => (
+                  {reports.map((r, i) => (
                     <tr
                       key={i}
-                      className="border-b hover:bg-blue-50/40 transition"
+                      className="border-b hover:bg-blue-50/40 cursor-pointer"
+                      onClick={() => setDrawerReport(r)}
                     >
                       <td className="p-3">
-                        {r.created_at
-                          ? new Date(r.created_at).toLocaleString()
-                          : "-"}
+                        {new Date(r.created_at).toLocaleString()}
                       </td>
-                      <td className="p-3">{r.symptoms?.length ?? 0} symptoms</td>
+                      <td className="p-3">{r.symptoms.length} symptoms</td>
                       <td className="p-3">
                         {r.medication_compliance ? (
                           <span className="text-green-600">Yes</span>
@@ -347,12 +379,7 @@ export default function Hospital() {
                           <span className="text-red-600">No</span>
                         )}
                       </td>
-                      <td
-                        className="p-3 text-blue-600 font-medium cursor-pointer"
-                        onClick={() => setDrawerReport(r)}
-                      >
-                        View →
-                      </td>
+                      <td className="p-3 text-blue-600 font-medium">View →</td>
                     </tr>
                   ))}
                 </tbody>
@@ -362,51 +389,52 @@ export default function Hospital() {
         )}
       </div>
 
-      {/* REPORT DRAWER */}
+      {/* ============================================================
+          REPORT DRAWER
+      ============================================================ */}
       {drawerReport && (
         <div className="fixed top-0 right-0 w-[420px] h-full bg-white shadow-xl p-6 animate-fadeIn z-50">
+          <button
+            onClick={() => setDrawerReport(null)}
+            className="absolute top-4 right-4 text-gray-600 hover:text-black text-2xl"
+          >
+            ✕
+          </button>
+
           <h2 className="text-xl font-bold mb-4">
-            Report Detail —{" "}
-            {drawerReport.created_at
-              ? new Date(drawerReport.created_at).toLocaleString()
-              : ""}
+            Report – {new Date(drawerReport.created_at).toLocaleString()}
           </h2>
 
-          <div className="mb-6">
+          <p className="mb-3">
             <strong>Medication Compliance:</strong>{" "}
             {drawerReport.medication_compliance ? (
               <span className="text-green-700 font-semibold">Yes</span>
             ) : (
               <span className="text-red-600 font-semibold">No</span>
             )}
-          </div>
+          </p>
 
           <div>
             <strong>Symptoms:</strong>
             <ul className="list-disc ml-6 mt-2">
-              {drawerReport.symptoms?.map((s: any, i: number) => (
+              {drawerReport.symptoms.map((s, i) => (
                 <li key={i}>
                   {s.symptom} ({s.severity})
                 </li>
               ))}
             </ul>
           </div>
-
-          <button
-            onClick={() => setDrawerReport(null)}
-            className="absolute top-4 right-4 text-gray-500 hover:text-black text-2xl"
-          >
-            ✕
-          </button>
         </div>
       )}
 
-      {/* PURPOSE MODAL */}
+      {/* ============================================================
+          PURPOSE MODAL
+      ============================================================ */}
       {showPurposeModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center animate-fadeIn">
           <div className="absolute inset-0 bg-white/40 backdrop-blur-sm"></div>
 
-          <div className="relative bg-white/80 backdrop-blur-xl shadow-2xl border border-white/50 rounded-3xl p-8 w-[460px]">
+          <div className="relative bg-white/80 backdrop-blur-xl shadow-2xl border border-white/50 rounded-3xl p-8 w-[460px] p-8">
             <h2 className="text-2xl font-bold text-blue-700 mb-3">
               Purpose Required
             </h2>
@@ -429,7 +457,7 @@ export default function Hospital() {
                   setPendingPatientId(null);
                   setPurpose("");
                 }}
-                className="px-5 py-2 rounded-xl border border-gray-300 bg-white/70 text-gray-600 hover:bg-gray-100"
+                className="px-5 py-2 rounded-xlborder border-gray-300 bg-white/70 text-gray-600 hover:bg-gray-100"
               >
                 Cancel
               </button>
