@@ -1,218 +1,321 @@
 # Clinical Trial Data Registry
+*A Blockchain-Powered, Consent-Driven Clinical Trial Data Management System*
 
-This repository implements a blockchain-powered clinical trial data
-registry, deployed on the Sepolia Test Network. It demonstrates how
-decentralized verification ensures transparent, auditable, and
-consent-driven clinical data management between patients and the
-hospital.
+This repository implements a decentralized clinical trial data registry deployed on the Ethereum Sepolia Test Network.
+The project demonstrates how blockchain guarantees transparent, auditable, and consent-controlled interactions between patients and the hospital, eliminating the need for trust in centralized data custodians.
 
-------------------------------------------------------------------------
+---
 
-## Project Overview
+## 1. Background and Motivation
 
-Traditional clinical trial data systems rely on centralized databases
-and manual audits, leading to challenges such as:
+Traditional clinical trial data infrastructure relies on centralized records, manual approvals, and human-dependent auditing. This leads to several unavoidable issues:
 
--   Lost or unverifiable patient consent records\
--   Inconsistent or opaque access logs\
--   Delays in detecting unauthorized data usage
+- Missing or unverifiable patient consent history  
+- Difficulty proving whether the hospital accessed data legitimately  
+- Risk of accidental or unauthorized data access  
+- Inconsistent audit trails across institutions  
+- Weak guarantees of data integrity  
 
-This system replaces institutional trust with cryptographic trust.\
-Every consent, data upload, and access event is verified and stored
-immutably on the blockchain.
+Blockchain technology—via immutable logs and cryptographic signatures—solves these problems by ensuring that:
 
-------------------------------------------------------------------------
+- Patients own and control their data.
+- Hospitals cannot view patient data without on-chain consent.
+- Every read action, write action, and consent change is permanently recorded on-chain.
 
-## System Design: Multi-Patient, Single-Hospital Model
+---
 
-This project follows a **multi-patient, single-hospital architecture**.\
-Each patient independently manages their own consent and data on-chain,
-while **the hospital** is the only authorized entity permitted to
-request access to patient records.\
-This streamlined permission model ensures that all patient consent
-directly controls whether the hospital can view their data.
+## 2. System Architecture  
+### Multi-Patient, Single-Hospital Model
 
-------------------------------------------------------------------------
+This project adopts a **multi-patient, single-hospital** permission design:
 
-## Core Features
+- Each patient has full on-chain control over their data.  
+- Each patient can independently grant or revoke consent.  
+- Only one hospital wallet is permitted to request access to patient data.  
+- The hospital’s data access is strictly controlled by each patient's on-chain consent flag.  
 
-### 1. Patient Consent Management
+This architecture ensures:
 
--   Patients can grant or revoke consent on-chain.\
--   Revoking consent instantly blocks hospital access.\
--   Blockchain events include `ConsentGranted` and `ConsentRevoked`.
+- Centralized care (hospital)  
+- Decentralized sovereignty (each patient independently controls access)  
+- Full traceability across all interactions  
 
-### 2. Secure Data Upload
+---
 
--   Patients upload clinical data or a hash of it on-chain using
-    `uploadData`.\
--   Ensures integrity, traceability, and immutability via blockchain.\
--   Event: `DataUploaded`.
+## 3. Core Features
 
-### 3. Access Authorization and Auditing
+### 3.1 Patient Consent Management (On-Chain)
 
--   The hospital can access patient data only when consent is active.\
--   Every access attempt generates:
-    -   An on-chain `DataAccess` event\
-    -   A synchronized PostgreSQL audit log entry
+Patients manage their own consent via smart contract functions:
 
-### 4. Real-Time Audit Trail
+- `grantConsent()` — Enables hospital access  
+- `revokeConsent()` — Immediately blocks access  
 
--   Backend maintains a PostgreSQL-based audit log (AccessLog table).\
--   Patients and administrators can review access histories in real
-    time.
+Smart contract emits:
 
-------------------------------------------------------------------------
+- `ConsentGranted`  
+- `ConsentRevoked`  
 
-## Tech Stack
+Consent stays authoritative because the hospital UI always checks the current blockchain state through direct contract calls.
 
--   **Smart Contract:** Solidity (Hardhat, Ethers v6)\
--   **Backend:** FastAPI, web3.py, SQLAlchemy, PostgreSQL\
--   **Frontend:** React, Vite, Tailwind CSS\
--   **Blockchain Network:** Sepolia Testnet (Alchemy RPC)
+---
 
-------------------------------------------------------------------------
+### 3.2 Data Upload & Integrity Verification
 
-## Environment Setup
+Patients upload a **PDF medical record** to the backend.
+
+The SHA-3/Keccak-256 hash of the file is stored on-chain using:
+
+```
+uploadData(bytes32 contentHash)
+```
+
+This creates immutable linkage between:
+
+- The hash on-chain  
+- The off-chain PDF stored in PostgreSQL  
+
+Smart contract emits:
+
+- `DataUploaded(patient, contentHash)`
+
+---
+
+### 3.3 Access Authorization & On-Chain Logging
+
+The hospital can request access via:
+
+```
+viewData(address patient, string purpose)
+```
+
+This function:
+
+- Verifies consent on-chain  
+- Emits a `DataAccess` event  
+- Returns success only if the patient has granted consent  
+
+The **frontend** receives the transaction hash and sends it to the backend, where it is recorded in PostgreSQL as an audit entry.
+
+This provides:
+
+- An immutable blockchain-level proof of access  
+- A structured backend audit log  
+
+---
+
+### 3.4 Dual-Layer Audit Trail
+
+#### Blockchain Layer  
+Records immutable events for:
+
+- Consent changes  
+- Data uploads  
+- Access attempts  
+
+#### Backend Layer (PostgreSQL)  
+Stores:
+
+- Patient profiles  
+- Self-reports  
+- Consent status (mirroring on-chain state through frontend calls)  
+- Access logs sent from the frontend  
+
+Patients and the hospital can review complete access history at any time.
+
+---
+
+## 4. System Components & Tech Stack
+
+### Smart Contract (chain/)
+- Solidity (0.8.x)  
+- Hardhat  
+- Ethers v6  
+- Sepolia Testnet  
+- Verified on Etherscan  
+
+### Backend (backend/)
+- FastAPI  
+- SQLAlchemy ORM  
+- PostgreSQL  
+- REST API for:  
+  - Self-report submissions  
+  - Patient profile management  
+  - Access log recording  
+  - Consent state mirroring (via frontend queries)  
+- Web3.py — Used for loading the deployed smart contract, reading on-chain consent state,
+  and querying historical blockchain events through event filters.
+
+### Frontend (frontend/)
+- React + Vite  
+- Tailwind CSS  
+- Ethers.js (BrowserProvider)  
+
+Two portals:
+
+1. **Patient Portal**  
+   - Consent management  
+   - Daily check-ins  
+   - PDF upload  
+
+2. **Hospital Portal**  
+   - Registry search  
+   - Permissioned access via `viewData()`  
+   - Dashboards & audit logs  
+
+---
+
+## 5. Environment Setup
 
 ### chain/.env
 
-    PRIVATE_KEY=your_metamask_private_key
-    ALCHEMY_SEPOLIA_URL=https://eth-sepolia.g.alchemy.com/v2/your_alchemy_key
-    ETHERSCAN_API_KEY=your_etherscan_key
+```
+PRIVATE_KEY=your_metamask_private_key
+ALCHEMY_SEPOLIA_URL=https://eth-sepolia.g.alchemy.com/v2/your_key
+ETHERSCAN_API_KEY=your_etherscan_key
+```
 
 ### backend/.env
 
-    DATABASE_URL=postgresql+psycopg2://username:password@host:port/database_name
-    CONTRACT_ADDRESS=0xYourDeployedContract
-    ALCHEMY_SEPOLIA_URL=https://eth-sepolia.g.alchemy.com/v2/your_alchemy_key
-
-### database install
-#### 1. Install PostgreSQL
-Download and install from:  
-https://www.postgresql.org/download/
-
-Use default settings:
-- Port: **5432**
-- User: **postgres**
-- Set a password
-
----
-
-#### 2. Create a Server (pgAdmin)
-Open **pgAdmin**, then:
-- Right-click **Servers → Create → Server**
-- Name it anything (e.g., `LocalDB`)
-- Connection tab:
-  - Host: `localhost`
-  - Port: `5432`
-  - Username: `postgres`
-  - Password: *your password*
-
-Click **Save**.
-
----
-
-#### 3. Create a Database
-In pgAdmin:
-- Expand your server  
-- Right-click **Databases → Create → Database**
-- Name it: **clinical**
-
----
-
-#### 4. Configure Backend Environment
-Create/edit `backend/.env`:
-
-```env
-DATABASE_URL=postgresql+psycopg2://postgres:YOUR_PASSWORD@localhost:5432/clinical
 ```
-------------------------------------------------------------------------
+DATABASE_URL=postgresql+psycopg2://postgres:YOUR_PASSWORD@localhost:5432/clinical
+CONTRACT_ADDRESS=0xYourDeployedContract
+ALCHEMY_SEPOLIA_URL=https://eth-sepolia.g.alchemy.com/v2/your_key
+```
 
-## Deploy Smart Contract
+---
 
-    cd chain
-    npm install
-    npx hardhat compile
-    npx hardhat run scripts/deploy.ts --network sepolia
+## 6. PostgreSQL Setup
 
-Example:
+1. Install PostgreSQL  
+2. Create database: `clinical`  
+3. Configure backend `.env`  
+4. Initialize tables:
 
-    ClinicalTrialRegistry deployed to: 0x1234...
-    Contract verified successfully
+```
+python -m app.db_init
+```
 
-------------------------------------------------------------------------
+---
 
-## Start FastAPI Backend
+## 7. Deployment
 
-    cd backend
-    pip install -r requirements.txt
-    python -m app.db_init
-    uvicorn app.main:app --reload --port 8000
+### 7.1 Deploy Smart Contract
 
-Backend tasks:
+```
+cd chain
+npm install
+npx hardhat compile
+npx hardhat run scripts/deploy.ts --network sepolia
+```
 
--   Connects to PostgreSQL\
--   Listens for blockchain events\
--   Synchronizes on-chain events into the database
+### 7.2 Start Backend
 
-------------------------------------------------------------------------
+```
+cd backend
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
+```
 
-## Start React Frontend
+### 7.3 Start Frontend
 
-    cd frontend
-    npm install
-    npm run dev
+```
+cd frontend
+npm install
+npm run dev
+```
 
 If backend uses a different port:
 
-    export VITE_API_BASE="http://localhost:8000"
+```
+export VITE_API_BASE="http://localhost:8000"
+```
 
-------------------------------------------------------------------------
+---
 
-## Demo Workflow
+## 8. End-to-End Workflow
 
-### Patient Actions
+### Patient Workflow
+- Connect MetaMask  
+- Upload medical PDF  
+- Hash stored on-chain  
+- Grant or revoke consent  
+- Submit daily self-reports  
 
--   Grant consent: `grantConsent()`\
--   Upload data: `uploadData(bytes32)`\
--   Revoke consent: `revokeConsent()`
+### Hospital Workflow
+- Search patient by Study ID  
+- Enter purpose → execute `viewData()` on-chain  
+- Frontend sends access log to backend  
+- Hospital views:  
+  - Medical PDF  
+  - Daily health reports  
+  - Access history  
 
-### Hospital Actions
+---
 
--   Access patient data: `viewData(address,string)`\
--   Every access produces:
-    -   On-chain `DataAccess`
-    -   PostgreSQL audit log entry
+## 9. Project Structure Overview
 
-### View Audit History
+```
+chain/
+  contracts/
+    ClinicalTrialRegistry.sol
+  scripts/
+    deploy.ts
 
-    GET /audit/patient/{address}
+backend/
+  app/
+    main.py
+    db_init.py
+    models/
+    routers/
 
-------------------------------------------------------------------------
+frontend/
+  src/
+    pages/
+      Patient.tsx
+      Hospital.tsx
+    abi/
+    components/
+```
 
-## Project Structure
+---
 
--   `chain/contracts/ClinicalTrialRegistry.sol` --- Smart contract\
--   `chain/scripts/deploy.ts` --- Deployment and verification\
--   `backend/app/main.py` --- FastAPI backend\
--   `backend/app/models/models.py` --- PostgreSQL SQLAlchemy models\
--   `frontend/src/` --- React UI\
--   `backend/.env` --- Backend configuration
+## 10. Smart Contract API Summary
 
-------------------------------------------------------------------------
+| Function | Description |
+|---------|-------------|
+| `grantConsent()` | Patient enables hospital access |
+| `revokeConsent()` | Patient blocks hospital access |
+| `uploadData(bytes32)` | Upload hash of medical PDF |
+| `viewData(address,string)` | Hospital requests data access |
 
-## Smart Contract Summary
+Events emitted:
 
--   `grantConsent()` / `revokeConsent()`\
--   `uploadData(bytes32)`\
--   `viewData(address, string)`
+- `ConsentGranted`  
+- `ConsentRevoked`  
+- `DataUploaded`  
+- `DataAccess`  
 
-------------------------------------------------------------------------
+---
 
-## Notes
+## 11. Additional Notes
 
--   All keys and data are for testing only.\
--   No real medical information is stored.\
+- All data in this demo is test-only.  
+- No real medical information or PHI is stored.  
+- Audit logs are submitted by frontend, not blockchain listeners.  
 
-**Clinical Trial Data Registry is successfully deployed on Sepolia Testnet — explore the verified smart contract [here](https://sepolia.etherscan.io/address/0x38790F8BAeFEa54bcb9A86763a94852ECed466Fb#code).**
+Smart contract on Sepolia:  
+https://sepolia.etherscan.io/address/0x38790F8BAeFEa54bcb9A86763a94852ECed466Fb#code
+
+---
+
+## 12. Conclusion
+
+This project demonstrates how blockchain can modernize clinical trial data systems by providing:
+
+- Cryptographic proof of patient consent  
+- Immutable access logs  
+- Strict permission control  
+- Dual-layer auditability  
+
+The result is a transparent, tamper-resistant, patient-centric registry aligned with the future of digital healthcare systems.
