@@ -526,6 +526,7 @@ export default function Hospital() {
                           axisLine={false}
                           tickLine={false}
                           tick={{ fill: "#64748b" }}
+                          dy={10}
                           tickFormatter={(value) => {
                             const [year, month] = value.split("-").map(Number);
                             const monthNames = [
