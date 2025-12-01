@@ -253,34 +253,7 @@ export VITE_API_BASE="http://localhost:8000"
 
 ---
 
-## 9. Project Structure Overview
-
-```
-chain/
-  contracts/
-    ClinicalTrialRegistry.sol
-  scripts/
-    deploy.ts
-
-backend/
-  app/
-    main.py
-    db_init.py
-    models/
-    routers/
-
-frontend/
-  src/
-    pages/
-      Patient.tsx
-      Hospital.tsx
-    abi/
-    components/
-```
-
----
-
-## 10. Smart Contract API Summary
+## 9. Smart Contract API Summary
 
 | Function | Description |
 |---------|-------------|
@@ -298,18 +271,17 @@ Events emitted:
 
 ---
 
-## 11. Additional Notes
+## 10. Additional Notes
 
 - All data in this demo is test-only.  
-- No real medical information or PHI is stored.  
-- Audit logs are submitted by frontend, not blockchain listeners.  
+- No real medical information or PHI is stored.   
 
 Smart contract on Sepolia:  
 https://sepolia.etherscan.io/address/0x38790F8BAeFEa54bcb9A86763a94852ECed466Fb#code
 
 ---
 
-## 12. Conclusion
+## 11. Conclusion
 
 This project demonstrates how blockchain can modernize clinical trial data systems by providing:
 
