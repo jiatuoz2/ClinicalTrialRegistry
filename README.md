@@ -267,8 +267,6 @@ npx hardhat compile
 npx hardhat run scripts/deploy.ts --network sepolia
 ```
 
-Update `CONTRACT_ADDRESS` in both `backend/.env` and `frontend` environment config.
-
 ---
 
 ### 7.2 Start Backend
