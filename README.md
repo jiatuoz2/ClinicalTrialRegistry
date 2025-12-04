@@ -212,17 +212,27 @@ Provides two portals:
 ### `chain/.env`
 
 ```bash
-PRIVATE_KEY=your_metamask_private_key
-ALCHEMY_SEPOLIA_URL=https://eth-sepolia.g.alchemy.com/v2/your_key
-ETHERSCAN_API_KEY=your_etherscan_key
+ALCHEMY_SEPOLIA_URL=https://eth-sepolia.g.alchemy.com/v2/<YOUR_KEY>
+PRIVATE_KEY=<YOUR_WALLET_PRIVATE_KEY>
+ETHERSCAN_API_KEY=<YOUR_API_KEY>
+HOSPITAL_WALLET_ADDRESS=<YOUR_HOSPITAL_WALLET_ADDRESS>
 ```
 
 ### `backend/.env`
 
 ```bash
-DATABASE_URL=postgresql+psycopg2://postgres:YOUR_PASSWORD@localhost:5432/clinical
+RPC_URL=https://eth-sepolia.g.alchemy.com/v2/<YOUR_KEY>
 CONTRACT_ADDRESS=0xYourDeployedContract
-ALCHEMY_SEPOLIA_URL=https://eth-sepolia.g.alchemy.com/v2/your_key
+NETWORK=sepolia
+
+DATABASE_URL=postgresql+psycopg2://postgres:<YOUR_PASSWORD>@localhost:5432/clinical
+```
+
+### `frontend/.env`
+
+```bash
+VITE_HOSPITAL_ADDRESS=<YOUR_HOSPITAL_WALLET_ADDRESS>
+VITE_REGISTRY_ADDRESS=<YOUR_REGISTRY_WALLET_ADDRESS>
 ```
 
 ---
