@@ -205,7 +205,6 @@ HOSPITAL_WALLET_ADDRESS=<YOUR_HOSPITAL_WALLET_ADDRESS>
 RPC_URL=https://eth-sepolia.g.alchemy.com/v2/<YOUR_KEY>
 CONTRACT_ADDRESS=0xYourDeployedContract
 NETWORK=sepolia
-
 DATABASE_URL=postgresql+psycopg2://postgres:<YOUR_PASSWORD>@localhost:5432/clinical
 ```
 
