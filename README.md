@@ -107,7 +107,7 @@ This provides:
 - An immutable **blockchain-level proof** of access.  
 - A structured **backend audit log** for querying and visualization.
 
-Currently, all interactions with `viewData` are performed from the frontend via Ethers.js. Web3.py can be used in future extensions to independently verify access events or to build background indexers.
+Currently, all interactions with `viewData` are performed from the frontend via Ethers.js.
 
 ---
 
@@ -127,10 +127,6 @@ Stores:
 - Self-reports (daily check-ins)  
 - Consent status (mirroring on-chain state based on confirmed frontend interactions)  
 - Access logs sent from the frontend, each tied to a transaction hash  
-
-The backend includes Web3.py integration that can be used for **read-only verification** of on-chain consent flags and events. In the current prototype, this capability is optional and not part of the main REST API flow; the system operates correctly even if Web3.py is not actively used, since the frontend already validates transactions and sends the resulting hashes to the backend.
-
-Patients and the hospital can review complete access history at any time, combining on-chain proofs with off-chain structured logs.
 
 ---
 
@@ -161,21 +157,6 @@ Core responsibilities:
   - Can load the deployed smart contract  
   - Can query on-chain consent state and historical events  
   - Currently used as an optional utility layer
-
-In the **current implementation**:
-
-- All on-chain transactions (consent changes, uploads, access requests) are initiated from the frontend.  
-- The backend focuses on:
-  - Storing patient profiles and study IDs  
-  - Persisting self-reports and metadata  
-  - Recording tx hashes and access logs for auditing  
-  - Mirroring consent status based on trusted frontend updates  
-
-Web3.py is available for future enhancements, such as:
-
-- Backend-side verification of consent flags before serving sensitive data  
-- Periodic indexing of blockchain events into PostgreSQL for analytics  
-- Cross-checking stored audit logs against on-chain history
 
 ---
 
